@@ -129,6 +129,7 @@ def plot_loss(logs):
 	plt.xlabel('epochs',fontsize=15)
 	plt.ylabel('loss value',fontsize=15)
 	plt.legend(fontsize=15)
+	plt.show()
 
 def plot_decision_boundary(X, y, pred_fn, boundry_level=None):
     """
