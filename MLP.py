@@ -1,12 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import random
+from numpyNN import plot_loss, plot_decision_boundary
 
 # TODO: ACCOUNT FOR BIASES!!
 
 class MLP:
 
-    def __init__(self, width, opt_act, opt_init, opt_loss, optimizer, learning_rate, momentum, alpha, beta1, beta2, epsilon) -> None:
+    def __init__(self, width, opt_act, opt_init, opt_loss, optimizer, learning_rate, momentum, beta1, beta2, epsilon) -> None:
         
         self.width = width
         self.opt_act = opt_act
@@ -17,10 +18,11 @@ class MLP:
         self.optimizer = optimizer
         self.learning_rate = learning_rate
         self.momentum = momentum
-        self.alpha = alpha
+        self.velocity = self.init_optimizer_gd_momentum()
         self.beta1 = beta1
         self.beta2 = beta2
         self.epsilon = epsilon
+        self.m, self.v, self.m_hat, self.v_hat, self.t = self.init_optimizer_adam()
 
     def activation(self, h, i):
 
@@ -109,8 +111,6 @@ class MLP:
             j += 1
         #print(self.weights)
         #print(self.acts)
-
-        return self.acts
     
     def loss(self, predicted, true):
         
@@ -127,10 +127,10 @@ class MLP:
 
                 return l, l_deriv
     
-    def backward(self):
+    def backward(self, error_de):
         
-        l, l_deriv = self.loss(self.acts[-1], np.array([0.5]))
-        error_de = l_deriv
+        #l, l_deriv = self.loss(self.acts[-1], np.array([0.5]))
+        #error_de = l_deriv
         error_de = error_de.reshape(-1, 1)
         #print(self.derivs)
         for i in reversed(range(len(self.width) - 1)):
@@ -145,7 +145,29 @@ class MLP:
             error_de = self.weights[i].T @ dL
 
         #print(self.derivs)
-            
+    
+    
+    def init_optimizer_adam(self):
+
+        m = []
+        v = []
+        m_hat = []
+        v_hat = []
+        t = 0
+        for i in range(len(self.width) - 1):
+            M = np.zeros((self.width[i + 1], self.width[i]))
+            m.append(M)
+            v.append(M)
+            m_hat.append(M)
+            v_hat.append(M)
+        
+        return m, v, m_hat, v_hat, t
+    
+    def init_optimizer_gd_momentum(self):
+
+        velocity = 0
+        return velocity
+
     def optimizer_step(self):
         
         match self.optimizer:
@@ -156,15 +178,47 @@ class MLP:
 
             case 'gd_with_momentum':
                 
-                velocity_initial = 0
                 for i in range(len(self.width) - 1):
-                    velocity = self.momentum * velocity_initial + self.learning_rate * self.derivs[i]
-                    self.weights[i] -= velocity
+                    self.velocity = self.momentum * self.velocity + self.learning_rate * self.derivs[i]
+                    self.weights[i] -= self.velocity
 
-                velocity_initial = velocity
 
             case 'adam':
-                pass
+
+                self.t += 1
+                for i in range(len(self.width) - 1):
+                    self.m[i] = (self.beta1 * self.m[i]) + (1 - self.beta1) * self.derivs[i]
+                    self.v[i] = (self.beta2 * self.v[i]) + (1 - self.beta2) * (self.derivs[i] * self.derivs[i])
+                    self.m_hat[i] = self.m[i] / (1 - self.beta1 ** self.t)
+                    self.v_hat[i] = self.v[i] / (1 - self.beta2 ** self.t)
+                    self.weights[i] -= (self.learning_rate * self.m_hat[i]) / (np.sqrt(self.v_hat[i]) + self.epsilon)
+
+    
+    def train_and_test(self, epochs, X_train, y_train, X_test, y_test):
+
+        losses = {'train_loss': [], 'test_loss': []}
+        
+        for epoch in range(epochs):
+
+            for i in range(len(X_train)):
+                self.forward(X_train[i])
+
+                l, l_deriv = self.loss(self.acts[-1], y_train[i])
+
+                self.backward(l_deriv)
+
+                self.optimizer_step()
+
+                losses['train_loss'].append(l)
+
+                self.forward(X_test[i])
+                l, _ = self.loss(self.acts[-1], y_test[i])
+
+                losses['test_loss'].append(l)
+
+        plot_loss(losses)
+            #plot_decision_boundary(X_test, y_test, self.forward())
+
 
 
 
