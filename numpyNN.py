@@ -131,7 +131,7 @@ def plot_loss(logs):
 	plt.legend(fontsize=15)
 	plt.show()
 
-def plot_decision_boundary(X, y, pred_fn, boundry_level=None):
+'''def plot_decision_boundary(X, y, pred_fn, boundry_level=None):
     """
     Plots the decision boundary for the model prediction
     :param X: input data
@@ -151,4 +151,4 @@ def plot_decision_boundary(X, y, pred_fn, boundry_level=None):
     plt.contourf(xx, yy, Z, alpha=0.7, levels=boundry_level, cmap='viridis_r')
     plt.xlim(xx.min(), xx.max())
     plt.ylim(yy.min(), yy.max())
-    plt.scatter(X[:, 0], X[:, 1], c=y.reshape(-1), alpha=0.7,s=50, cmap='viridis_r',)
+    plt.scatter(X[:, 0], X[:, 1], c=y.reshape(-1), alpha=0.7,s=50, cmap='viridis_r',)'''
