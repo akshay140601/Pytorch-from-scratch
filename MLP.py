@@ -1,13 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import random
-from numpyNN import plot_loss, plot_decision_boundary
+from numpyNN import plot_loss
 
 # TODO: ACCOUNT FOR BIASES!!
 
 class MLP:
 
-    def __init__(self, width, opt_act, opt_init, opt_loss, optimizer, learning_rate, momentum, beta1, beta2, epsilon) -> None:
+    def __init__(self, width, opt_act, opt_init, opt_loss, optimizer, learning_rate, momentum, beta1, beta2, epsilon, non_linear = False) -> None:
         
         self.width = width
         self.opt_act = opt_act
@@ -23,6 +23,7 @@ class MLP:
         self.beta2 = beta2
         self.epsilon = epsilon
         self.m, self.v, self.m_hat, self.v_hat, self.t = self.init_optimizer_adam()
+        self.non_linear = non_linear
 
     def activation(self, h, i):
 
@@ -31,7 +32,7 @@ class MLP:
                 return (1. / (1. + np.exp(-h)))
             
             case 'relu':
-                return np.max(0.0, h)
+                return np.maximum(0.0, h)
             
             case 'tanh':
                 return ((np.exp(h) - np.exp(-h)) / (np.exp(h) + np.exp(-h)))
@@ -47,10 +48,7 @@ class MLP:
                 return h * (1 - h)
             
             case 'relu':
-                if h <= 0:
-                    return 0
-                else:
-                    return 1
+                return np.where(h <= 0, 0, 1)
                 
             case 'tanh':
                 #x = self.activation(h)
@@ -106,7 +104,9 @@ class MLP:
         for i in range(len(self.width) - 1):
             pre_acts = self.weights[i] @ acts
             #pre_acts = np.dot(acts, self.weights[i])
+            #print('Before Activation: ', pre_acts)
             acts = self.activation(pre_acts, i)  #TODO: Don't put sigmoid to last layer
+            #print('After activation: ', acts)
             self.acts[j] = acts
             j += 1
         #print(self.weights)
@@ -122,10 +122,19 @@ class MLP:
                 return l, l_deriv
 
             case 'ce':
-                l = - ((true * np.log(predicted)) + (1 - true) * np.log(1 - predicted))
+                '''l = - ((true * np.log(predicted)) + (1 - true) * np.log(1 - predicted))
+                l_deriv = (predicted - true) / (predicted * (1 - predicted))'''
+                #l = -np.mean(true * np.log(predicted) + (1 - true) * np.log(1 - predicted))
+                #l_deriv = (predicted - true) / (predicted * (1 - predicted) + 1e-8) / len(true)  # Adding a small epsilon to avoid division by zero
+                epsilon = 1e-6
+                #predicted = np.clip(predicted, epsilon, 1 - epsilon)
+                ce_loss = - (true * np.log(predicted) + (1 - true) * np.log(1 - predicted))
+                l = np.sum(ce_loss)
                 l_deriv = (predicted - true) / (predicted * (1 - predicted))
-
                 return l, l_deriv
+
+
+                #return l, l_deriv
     
     def backward(self, error_de):
         
@@ -134,7 +143,7 @@ class MLP:
         error_de = error_de.reshape(-1, 1)
         #print(self.derivs)
         for i in reversed(range(len(self.width) - 1)):
-            act_deriv = self.derivates((self.acts[i + 1]), i)
+            act_deriv = self.derivates(self.acts[i + 1], i)
             if (type(act_deriv) == int):
                 act_deriv = np.array([act_deriv]).reshape(-1, 1)
             else:
@@ -165,7 +174,10 @@ class MLP:
     
     def init_optimizer_gd_momentum(self):
 
-        velocity = 0
+        velocity = []
+        for i in range(len(self.width) - 1):
+            v = np.zeros((self.width[i + 1], self.width[i]))
+            velocity.append(v)
         return velocity
 
     def optimizer_step(self):
@@ -179,8 +191,8 @@ class MLP:
             case 'gd_with_momentum':
                 
                 for i in range(len(self.width) - 1):
-                    self.velocity = self.momentum * self.velocity + self.learning_rate * self.derivs[i]
-                    self.weights[i] -= self.velocity
+                    self.velocity[i] = self.momentum * self.velocity[i] + self.learning_rate * self.derivs[i]
+                    self.weights[i] -= self.velocity[i]
 
 
             case 'adam':
@@ -193,6 +205,69 @@ class MLP:
                     self.v_hat[i] = self.v[i] / (1 - self.beta2 ** self.t)
                     self.weights[i] -= (self.learning_rate * self.m_hat[i]) / (np.sqrt(self.v_hat[i]) + self.epsilon)
 
+    def plot_decision_boundary(self, X, y, boundry_level=None):
+        """
+        Plots the decision boundary for the model prediction
+        :param X: input data
+        :param y: true labels
+        :param pred_fn: prediction function,  which use the current model to predict。. i.e. y_pred = pred_fn(X)
+        :boundry_level: Determines the number and positions of the contour lines / regions.
+        :return:
+        """
+        
+        x_min, x_max = X[:, 0].min() - 0.1, X[:, 0].max() + 0.1
+        y_min, y_max = X[:, 1].min() - 0.1, X[:, 1].max() + 0.1
+        xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.01),
+                            np.arange(y_min, y_max, 0.01))
+        
+        input_data = np.c_[xx.ravel(), yy.ravel()]
+
+        Z = np.zeros((input_data.shape[0], 1))
+        
+        for i in range(input_data.shape[0]):
+            self.forward(input_data[i])
+            Z[i, 0] = self.acts[-1]
+
+        #Z = pred_fn(np.c_[xx.ravel(), yy.ravel()])
+        Z = Z.reshape(xx.shape)
+        plt.contourf(xx, yy, Z, alpha=0.7, levels=boundry_level, cmap='viridis_r')
+        plt.xlim(xx.min(), xx.max())
+        plt.ylim(yy.min(), yy.max())
+        plt.scatter(X[:, 0], X[:, 1], c=y.reshape(-1), alpha=0.7,s=50, cmap='viridis_r',)
+        plt.show()
+
+    def plot_decision_boundary_non_linear_embeddings(self, X, y, boundry_level=None):
+        """
+        Plots the decision boundary for the model prediction
+        :param X: input data
+        :param y: true labels
+        :param pred_fn: prediction function,  which use the current model to predict。. i.e. y_pred = pred_fn(X)
+        :boundry_level: Determines the number and positions of the contour lines / regions.
+        :return:
+        """
+        
+        x_min, x_max = X[:, 0].min() - 0.1, X[:, 0].max() + 0.1
+        y_min, y_max = X[:, 1].min() - 0.1, X[:, 1].max() + 0.1
+        xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.01),
+                            np.arange(y_min, y_max, 0.01))
+        xx3 = (xx ** 2 + yy ** 2).reshape(xx.shape)
+        
+        input_data = np.c_[xx.ravel(), yy.ravel(), xx3.ravel()]
+
+        Z = np.zeros((input_data.shape[0], 1))
+        
+        for i in range(input_data.shape[0]):
+            self.forward(input_data[i])
+            Z[i, 0] = self.acts[-1]
+
+        #Z = pred_fn(np.c_[xx.ravel(), yy.ravel()])
+        Z = Z.reshape(xx.shape)
+        plt.contourf(xx, yy, Z, alpha=0.7, levels=boundry_level, cmap='viridis_r')
+        plt.xlim(xx.min(), xx.max())
+        plt.ylim(yy.min(), yy.max())
+        plt.scatter(X[:, 0], X[:, 1], c=y.reshape(-1), alpha=0.7,s=50, cmap='viridis_r',)
+        plt.show()
+
     
     def train_and_test(self, epochs, X_train, y_train, X_test, y_test):
 
@@ -200,8 +275,12 @@ class MLP:
         
         for epoch in range(epochs):
 
+            train_loss = []
+            test_loss = []
+
             for i in range(len(X_train)):
                 self.forward(X_train[i])
+                #print(self.acts[-1])
 
                 l, l_deriv = self.loss(self.acts[-1], y_train[i])
 
@@ -209,15 +288,21 @@ class MLP:
 
                 self.optimizer_step()
 
-                losses['train_loss'].append(l)
+                train_loss.append(l)
 
                 self.forward(X_test[i])
                 l, _ = self.loss(self.acts[-1], y_test[i])
 
-                losses['test_loss'].append(l)
+                test_loss.append(l)
+
+            losses['train_loss'].append(np.mean(train_loss))
+            losses['test_loss'].append(np.mean(test_loss))
 
         plot_loss(losses)
-            #plot_decision_boundary(X_test, y_test, self.forward())
+        if self.non_linear == False:
+            self.plot_decision_boundary(X_test, y_test)
+        else:
+            self.plot_decision_boundary_non_linear_embeddings(X_test, y_test)
 
 
 
